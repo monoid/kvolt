@@ -86,7 +86,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                      ;; INCR and DECR
                      (if (contains? c key)
                        (let [e (get c key)]
-                         (make-entry (func value (:value e))
+                         (make-entry (func (:value e) value)
                                      (:flags e)
                                      (:expire e)))
                        (throw (ex-info "NOT_FOUND" {:key key
@@ -96,32 +96,33 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
             (fn [c]
               (assoc c key
                      ;; APPEND and PREPEND
-                     (make-entry (func value (:value (get c key
-                                                          {:value default})))
+                     (make-entry (func (:value (get c key
+                                                    {:value default}))
+                                       value)
                                  flags expire))))))
 
 (defn cache-append
   "APPEND command."
   [cache key value flags expire]
-  (update-with-func cache key value flags expire #(str %2 %1) ""))
+  (update-with-func cache key value flags expire #(str %1 %2) ""))
 
 (defn cache-prepend
   "PREPEND command."
   [cache key value flags expire]
-  (update-with-func cache key value flags expire #(str %1 %2) ""))
+  (update-with-func cache key value flags expire #(str %2 %1) ""))
 
 (defn cache-incr
   "INCR command."
   [cache key value]
   (update-with-func cache key value
-                    (fn [new old]
-                      (str (+ (Long. new) (Long. old))))))
+                    (fn [old new]
+                      (str (+ (Long. old) (Long. new))))))
 
 (defn cache-decr
   "DECR command."
   [cache key value]
   (update-with-func cache key value
-                    (fn [new old]
+                    (fn [old new]
                       (str
                        ;; Prevent underflow as per spec
                        (max 0
