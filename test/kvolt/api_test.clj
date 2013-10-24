@@ -121,7 +121,7 @@
                  (nth 1)
                  :value))))))
 
-(deftest inc-success-test
+(deftest incr-success-test
   (testing "cache-incr for existing valid entry."
     (let [c (make-cache)]
       (cache-set c "test" "18" 42 0)
@@ -132,21 +132,21 @@
                  (nth 1)
                  :value))))))
 
-(deftest inc-malformed1-test
+(deftest incr-malformed1-test
   (testing "cache-incr for invalid value."
     (let [c (make-cache)]
       (cache-set c "test" "a18" 42 0)
       (is (thrown? NumberFormatException
                    (cache-incr c "test" "24"))))))
 
-(deftest inc-malformed2-test
+(deftest incr-malformed2-test
   (testing "cache-incr for invalid argument."
     (let [c (make-cache)]
       (cache-set c "test" "18" 42 0)
       (is (thrown? NumberFormatException
                    (cache-incr c "test" "a24"))))))
 
-(deftest inc-nonexist-test
+(deftest incr-nonexist-test
   (testing "cache-incr for empty cache."
     (let [c (make-cache)]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"^NOT_FOUND$"
