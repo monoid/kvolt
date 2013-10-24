@@ -1,4 +1,4 @@
-(ns memcashed.core
+(ns kvolt.core
   (:gen-class))
 
 (defn -main
