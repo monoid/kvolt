@@ -10,6 +10,7 @@
 
 (defn- make-entry [value flags expire]
   (let [time (System/currentTimeMillis)]
+    ;; TODO: expire may be relative or absolute; resolve it.
     (->Entry value flags time time expire)))
 
 (defn- update-access-ts
@@ -30,6 +31,7 @@
   ;; Update timestamps and return new cache.
   (let [c (swap! cache
                  (fn [c keys]
+                   ;; TODO: also remove expired values
                    (let [ts-func (constantly (System/currentTimeMillis))]
                      (update-entries c keys update-access-ts ts-func)))
                  keys)]
