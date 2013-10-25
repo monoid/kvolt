@@ -193,3 +193,11 @@
     (let [c (make-cache)]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"^NOT_FOUND$"
                             (cache-decr c "test" "42"))))))
+
+(deftest flush-all-test
+  (testing "flush-all."
+    (let [c (make-cache)]
+      (doseq [i (range 10)]
+        (cache-set c (str "test" i) (str "value" i) 42 0))
+      (cache-flush-all c)
+      (is (= {} @c)))))

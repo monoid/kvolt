@@ -127,3 +127,16 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                        ;; Prevent underflow as per spec
                        (max 0
                             (- (Long. old) (Long. new)))))))
+
+(defn cache-flush-all
+  ([cache]
+     (swap! cache (constantly {})))
+  ([cache ts]
+     (swap! cache
+            (fn [c ts]
+              (hash (for [pair c
+                          :let [e (pair 1)]
+                          :when (>= (:expire e) ts)]
+                      pair)))
+            ;; TODO: timestamp may be relative or absolute; resolve it.
+            (Long. ts))))
