@@ -1,14 +1,32 @@
 (ns kvolt.proto
-  (:require [lamina.core :refer :all]
+  (:require [clojure.string :as string]
+            [lamina.core :refer :all]
             [aleph.tcp :refer :all]
             [gloss.core :refer :all]
             [kvolt.api :as api]))
 
-(defn parse-command-line [cmd]
-  (->> cmd
-       (re-matches #"(?:(?:(set|add|replace|append|prepend) ([^ \t]+) (\d+) (\d+) (\d+)(?: (noreply))?)|(?:(get|gets) ([^ \t]+ )*([^ \t]+))) *\r\n")
-       rest
-       (filter identity)))
+(defn- split-varargs
+  "Handle get and gets separately as regexps cannot parse their args in
+ready form."
+  [cmd]
+  (case (nth cmd 0)
+    ("get" "gets")
+    (concat [(nth cmd 0)]
+            (-> cmd
+                (nth 1)
+                (subs 1)
+                (string/split #" ")))
+    cmd))
+
+
+(defn parse-command-line
+  "Check validity of command line and split it into strings."
+  [line]
+  (some->> line
+           (re-matches #"(?:(?:(set|add|replace|append|prepend) ([^ \t]+) (\d+) (\d+) (\d+)(?: (noreply))?)|(?:(cas) ([^ \t]+) (\d+) (\d+) (\d+) (\d+))|(?:(get|gets)((?: [^ \t]+)+))|(?:(stats)(?: ([^ \t]+))?)|(quit|version)|(?:(flush_all)(?: (\d+))?)|(?:(incr|decr|touch) ([^ \t]+) (\d+)(?: (noreply))?)|(?:(delete) ([^ \t]+)(?: (noreply))?)) *\r\n")
+           rest ; remove first element
+           (remove nil?)
+           split-varargs))
 
 (defcodec empty-frame
   [])
