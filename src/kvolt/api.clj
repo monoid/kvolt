@@ -61,6 +61,8 @@
   (swap! cache
          (fn [c]
            (if (contains? c key)
+             ;; TODO check if entry haven't expired yet.  Write
+             ;; contains-valid? for this.
              (throw (ex-info "NOT_STORED" {:key key :value value
                                            :flags flags :expire expire
                                            :cache c}))
@@ -73,6 +75,7 @@
   (swap! cache
          (fn [c]
            (if (contains? c key)
+             ;; TODO check if entry haven't expired yet.
              (assoc c key (make-entry value flags expire))
              (throw (ex-info "NOT_STORED" {:key key :value value
                                            :flags flags :expire expire
@@ -88,6 +91,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                      ;; INCR and DECR
                      (if (contains? c key)
                        (let [e (get c key)]
+                         ;; TODO check if e haven't expired yet.
                          (make-entry (func (:value e) value)
                                      (:flags e)
                                      (:expire e)))
@@ -98,6 +102,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
             (fn [c]
               (assoc c key
                      ;; APPEND and PREPEND
+                     ;; TODO check if entry haven't expired yet.
                      (make-entry (func (:value (get c key
                                                     {:value default}))
                                        value)
@@ -106,11 +111,13 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
 (defn cache-append
   "APPEND command."
   [cache key value flags expire]
+  ;; TODO values are arrays of bytes, not strings
   (update-with-func cache key value flags expire #(str %1 %2) ""))
 
 (defn cache-prepend
   "PREPEND command."
   [cache key value flags expire]
+  ;; TODO values are arrays of bytes, not strings
   (update-with-func cache key value flags expire #(str %2 %1) ""))
 
 (defn cache-incr
@@ -118,6 +125,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   [cache key value]
   (update-with-func cache key value
                     (fn [old new]
+                      ;; TODO values are arrays of bytes, not strings
                       (str (+ (Long. old) (Long. new))))))
 
 (defn cache-decr
@@ -125,6 +133,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   [cache key value]
   (update-with-func cache key value
                     (fn [old new]
+                      ;; TODO values are arrays of bytes, not strings
                       (str
                        ;; Prevent underflow as per spec
                        (max 0
@@ -136,6 +145,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   ([cache ts]
      (swap! cache
             (fn [c ts]
+              ;; TOOD: collect keys and use select-keys
               (hash (for [pair c
                           :let [e (pair 1)]
                           :when (>= (:expire e) ts)]

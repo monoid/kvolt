@@ -41,10 +41,17 @@ ready form."
                 (do
                   (let [fr [p
                             (compile-frame
+                             ;; Is there better way to represent array
+                             ;; of n bytes in glos?
+                             ;; (fixed-frame n) failed with cryptic message.
                              (repeat (Integer. (nth p 4)) :byte))
                             "\r\n"]]
                     (compile-frame fr)))
+                ;; Ok, it is some command without trailing data.
                 (compile-frame [p]))
+              ;; TODO: return error message, either ERROR (unknwn
+              ;; command) or CLIENT_ERROR (known command with
+              ;; incorrect args).
               empty-frame))
           (fn [& args]
             ;; TODO TODO TODO
