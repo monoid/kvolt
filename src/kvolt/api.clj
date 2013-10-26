@@ -14,8 +14,8 @@
     (->Entry value flags time time expire)))
 
 (defn- update-access-ts
-  [entry ts-func]
-  (update-in entry [:access-ts] ts-func))
+  [entry ts]
+  (assoc-in entry [:access-ts] ts))
 
 (defn- update-entries [c keys f & values]
   (reduce (fn [c k]
@@ -32,8 +32,8 @@
   (let [c (swap! cache
                  (fn [c keys]
                    ;; TODO: also remove expired values
-                   (let [ts-func (constantly (System/currentTimeMillis))]
-                     (update-entries c keys update-access-ts ts-func)))
+                   (let [ts (System/currentTimeMillis)]
+                     (update-entries c keys update-access-ts ts)))
                  keys)]
     (filter second ; Remove entries without values
             (map (juxt identity c) keys))))
