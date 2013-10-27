@@ -108,17 +108,25 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                                        value)
                                  flags expire))))))
 
+(defn concat-byte-arrays [a b]
+  ;; TODO: optimize?  Allocate array and copy
+  ;; bytes.  But it may be actually slower, unless we employ explicit
+  ;; loop with recur...
+  (byte-array (concat (seq a) (seq b))))
+
 (defn cache-append
   "APPEND command."
   [cache key value flags expire]
   ;; TODO values are arrays of bytes, not strings
-  (update-with-func cache key value flags expire #(str %1 %2) ""))
+  (update-with-func cache key value flags expire #(concat-byte-arrays %1 %2)
+                    (byte-array [])))
 
 (defn cache-prepend
   "PREPEND command."
   [cache key value flags expire]
   ;; TODO values are arrays of bytes, not strings
-  (update-with-func cache key value flags expire #(str %2 %1) ""))
+  (update-with-func cache key value flags expire #(concat-byte-arrays %2 %1)
+                    (byte-array [])))
 
 (defn cache-incr
   "INCR command."
@@ -126,7 +134,9 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   (update-with-func cache key value
                     (fn [old new]
                       ;; TODO values are arrays of bytes, not strings
-                      (str (+ (Long. old) (Long. new))))))
+                      (.getBytes
+                       (str (+ (Long. (String. old))
+                               (Long. (String. new))))))))
 
 (defn cache-decr
   "DECR command."
@@ -134,10 +144,12 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   (update-with-func cache key value
                     (fn [old new]
                       ;; TODO values are arrays of bytes, not strings
-                      (str
-                       ;; Prevent underflow as per spec
-                       (max 0
-                            (- (Long. old) (Long. new)))))))
+                      (.getBytes
+                       (str
+                        ;; Prevent underflow as per spec
+                        (max 0
+                             (- (Long. (String. old))
+                                (Long. (String. new)))))))))
 
 (defn cache-flush-all
   ([cache]

@@ -1,7 +1,17 @@
 (ns kvolt.api-test
   (:require [clojure.test :refer :all]
             [kvolt.api :refer :all])
-  (:import clojure.lang.ExceptionInfo))
+  (:import clojure.lang.ExceptionInfo
+           java.util.Arrays))
+
+(def VALUE (.getBytes "value"))
+(def ANOTHER (.getBytes "another"))
+
+(deftest concat-byte-arrays-test
+  (testing "Concatenation of byte arrays."
+    (is (= [1 2 3 4 5]
+           (vec (concat-byte-arrays (byte-array (map byte [1 2 3]))
+                                    (byte-array (map byte [4 5]))))))))
 
 (deftest empty-cache-test
   (testing "Querying from empty cache returns nothing."
@@ -12,7 +22,7 @@
 (deftest set-and-get-key-test
   (testing "Setting and getting value."
     (let [c (make-cache)]
-      (cache-set c "test" "value" 0 0)
+      (cache-set c "test" VALUE 0 0)
       (is (= "test"
              (-> (cache-get c ["test"])
                  first
@@ -21,8 +31,8 @@
 (deftest set-and-get-value-test
   (testing "Setting and getting value."
     (let [c (make-cache)]
-      (cache-set c "test" "value" 0 0)
-      (is (= "value"
+      (cache-set c "test" VALUE 0 0)
+      (is (= VALUE
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -31,7 +41,7 @@
 (deftest set-and-get-flags-test
   (testing "Setting and getting value."
     (let [c (make-cache)]
-      (cache-set c "test" "value" 42 0)
+      (cache-set c "test" VALUE 42 0)
       (is (= '42
              (-> (cache-get c ["test"])
                  first
@@ -41,15 +51,15 @@
 (deftest delete-test
   (testing "cache-delete."
     (let [c (make-cache)]
-      (cache-set c "test" "value" 42 0)
+      (cache-set c "test" VALUE 42 0)
       (cache-delete c "test")
       (is (= '() (cache-get c ["test"]))))))
 
 (deftest add-success-test
   (testing "cache-add success."
     (let [c (make-cache)]
-      (cache-add c "test" "value" 42 0)
-      (is (= "value"
+      (cache-add c "test" VALUE 42 0)
+      (is (Arrays/equals VALUE
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -58,16 +68,16 @@
 (deftest add-failure-test
   (testing "cache-add failure on existring entry."
     (let [c (make-cache)]
-      (cache-set c "test" "value" 0 0)
+      (cache-set c "test" VALUE 0 0)
       (is (thrown-with-msg? ExceptionInfo #"^NOT_STORED$"
-                            (cache-add c "test" "another" 42 0))))))
+                            (cache-add c "test" ANOTHER 42 0))))))
 
 (deftest replace-success-test
   (testing "cache-add success."
     (let [c (make-cache)]
-      (cache-set c "test" "value" 0 0)
-      (cache-replace c "test" "another" 42 1)
-      (is (= "another"
+      (cache-set c "test" VALUE 0 0)
+      (cache-replace c "test" ANOTHER 42 1)
+      (is (Arrays/equals ANOTHER
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -77,13 +87,13 @@
   (testing "cache-add failure on existring entry."
     (let [c (make-cache)]
       (is (thrown-with-msg? ExceptionInfo #"^NOT_STORED$"
-                            (cache-replace c "test" "another" 42 0))))))
+                            (cache-replace c "test" ANOTHER 42 0))))))
 
 (deftest append-empty-test
   (testing "cache-append with empty cache."
     (let [c (make-cache)]
-      (cache-append c "test" "value" 42 0)
-      (is (= "value"
+      (cache-append c "test" (.getBytes "value") 42 0)
+      (is (Arrays/equals VALUE
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -92,9 +102,9 @@
 (deftest append-nonempty-test
   (testing "cache-append with non-empty cache."
     (let [c (make-cache)]
-      (cache-set c "test" "This is a" 42 0)
-      (cache-append c "test" " text" 45 1)
-      (is (= "This is a text"
+      (cache-set c "test" (.getBytes "This is a") 42 0)
+      (cache-append c "test" (.getBytes " text") 45 1)
+      (is (Arrays/equals (.getBytes "This is a text")
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -103,8 +113,8 @@
 (deftest prepend-empty-test
   (testing "cache-prepend with empty cache."
     (let [c (make-cache)]
-      (cache-prepend c "test" "value" 42 0)
-      (is (= "value"
+      (cache-prepend c "test" VALUE 42 0)
+      (is (Arrays/equals VALUE
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -113,9 +123,9 @@
 (deftest prepend-nonempty-test
   (testing "cache-prepend with non-empty cache."
     (let [c (make-cache)]
-      (cache-set c "test" "This is a" 42 0)
-      (cache-prepend c "test" " text" 45 1)
-      (is (= " textThis is a"
+      (cache-set c "test" (.getBytes "This is a") 42 0)
+      (cache-prepend c "test" (.getBytes " text") 45 1)
+      (is (Arrays/equals (.getBytes " textThis is a")
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -124,9 +134,9 @@
 (deftest incr-success-test
   (testing "cache-incr for existing valid entry."
     (let [c (make-cache)]
-      (cache-set c "test" "18" 42 0)
-      (cache-incr c "test" "24")
-      (is (= "42"
+      (cache-set c "test" (.getBytes "18") 42 0)
+      (cache-incr c "test" (.getBytes "24"))
+      (is (Arrays/equals (.getBytes "42")
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -135,29 +145,29 @@
 (deftest incr-malformed1-test
   (testing "cache-incr for invalid value."
     (let [c (make-cache)]
-      (cache-set c "test" "a18" 42 0)
+      (cache-set c "test" (.getBytes "a18") 42 0)
       (is (thrown? NumberFormatException
-                   (cache-incr c "test" "24"))))))
+                   (cache-incr c "test" (.getBytes "24")))))))
 
 (deftest incr-malformed2-test
   (testing "cache-incr for invalid argument."
     (let [c (make-cache)]
-      (cache-set c "test" "18" 42 0)
+      (cache-set c "test" (.getBytes "18") 42 0)
       (is (thrown? NumberFormatException
-                   (cache-incr c "test" "a24"))))))
+                   (cache-incr c "test" (.getBytes "a24")))))))
 
 (deftest incr-nonexist-test
   (testing "cache-incr for empty cache."
     (let [c (make-cache)]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"^NOT_FOUND$"
-                            (cache-incr c "test" "42"))))))
+                            (cache-incr c "test" (.getBytes "42")))))))
 
 (deftest decr-success-test
   (testing "cache-decr for existing valid entry without underflow."
     (let [c (make-cache)]
-      (cache-set c "test" "24" 42 0)
-      (cache-decr c "test" "18")
-      (is (= "6"
+      (cache-set c "test" (.getBytes "24") 42 0)
+      (cache-decr c "test" (.getBytes "18"))
+      (is (Arrays/equals (.getBytes "6")
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -166,9 +176,9 @@
 (deftest decr-success-test
   (testing "cache-decr for existing valid entry with underflow."
     (let [c (make-cache)]
-      (cache-set c "test" "18" 42 0)
-      (cache-decr c "test" "24")
-      (is (= "0"
+      (cache-set c "test" (.getBytes "18") 42 0)
+      (cache-decr c "test" (.getBytes "24"))
+      (is (Arrays/equals (.getBytes "0")
              (-> (cache-get c ["test"])
                  first
                  (nth 1)
@@ -177,27 +187,27 @@
 (deftest decr-malformed1-test
   (testing "cache-decr for invalid value."
     (let [c (make-cache)]
-      (cache-set c "test" "a18" 42 0)
+      (cache-set c "test" (.getBytes "a18") 42 0)
       (is (thrown? IllegalArgumentException
-                   (cache-decr c "test" "24"))))))
+                   (cache-decr c "test" (.getBytes "24")))))))
 
 (deftest decr-malformed2-test
   (testing "cache-decr for invalid argument."
     (let [c (make-cache)]
-      (cache-set c "test" "18" 42 0)
+      (cache-set c "test" (.getBytes "18") 42 0)
       (is (thrown? IllegalArgumentException
-                   (cache-decr c "test" "a24"))))))
+                   (cache-decr c "test" (.getBytes "a24")))))))
 
 (deftest decr-nonexist-test
   (testing "cache-decr for empty cache."
     (let [c (make-cache)]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"^NOT_FOUND$"
-                            (cache-decr c "test" "42"))))))
+                            (cache-decr c "test" (.getBytes "42")))))))
 
 (deftest flush-all-test
   (testing "flush-all."
     (let [c (make-cache)]
       (doseq [i (range 10)]
-        (cache-set c (str "test" i) (str "value" i) 42 0))
+        (cache-set c (str "test" i) (.getBytes (str "value" i)) 42 0))
       (cache-flush-all c)
       (is (= {} @c)))))
