@@ -108,11 +108,13 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                                        value)
                                  flags expire))))))
 
-(defn concat-byte-arrays [a b]
-  ;; TODO: optimize?  Allocate array and copy
-  ;; bytes.  But it may be actually slower, unless we employ explicit
-  ;; loop with recur...
-  (byte-array (concat (seq a) (seq b))))
+(defn concat-byte-arrays [^bytes a ^bytes b]
+  (let [al (alength a)
+        bl (alength b)
+        r (byte-array (+ al bl))]
+    (System/arraycopy a 0 r  0 al)
+    (System/arraycopy b 0 r al bl)
+    r))
 
 (defn cache-append
   "APPEND command."
