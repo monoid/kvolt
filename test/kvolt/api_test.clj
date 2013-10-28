@@ -19,6 +19,30 @@
            (cache-get (make-cache)
                       ["test"])))))
 
+(deftest valid?-empty-test
+  (testing "valid? returns false on non-existent entry."
+    (let [c (make-cache), ts (System/currentTimeMillis)]
+      (is (not (valid? ts c "test"))))))
+
+(deftest valid?-zero-ts-test
+  (testing "valid? returns true on entry with zero expiration."
+    (let [c (make-cache), ts (System/currentTimeMillis)]
+      (cache-set c "test" (byte-array []) 42 0)
+      (is (valid? ts c "test")))))
+
+(deftest valid?-old-test
+  (testing "valid? returns false on expired entry."
+    (let [c (make-cache), ts (System/currentTimeMillis)]
+      (cache-set c "test" (byte-array []) 42 (- ts 100))
+      (is (not (valid? ts c "test"))))))
+
+(deftest valid?-new-test
+  (testing "valid? returns true on fresh entry."
+    (let [c (make-cache), ts (System/currentTimeMillis)]
+      (cache-set c "test" (byte-array []) 42 (+ ts 10000))
+      (is (valid? ts c "test")))))
+
+
 (deftest set-and-get-key-test
   (testing "Setting and getting value."
     (let [c (make-cache)]
@@ -76,7 +100,7 @@
   (testing "cache-add success."
     (let [c (make-cache)]
       (cache-set c "test" VALUE 0 0)
-      (cache-replace c "test" ANOTHER 42 1)
+      (cache-replace c "test" ANOTHER 42 0)
       (is (Arrays/equals ANOTHER
              (-> (cache-get c ["test"])
                  first
@@ -103,7 +127,7 @@
   (testing "cache-append with non-empty cache."
     (let [c (make-cache)]
       (cache-set c "test" (.getBytes "This is a") 42 0)
-      (cache-append c "test" (.getBytes " text") 45 1)
+      (cache-append c "test" (.getBytes " text") 45 0)
       (is (Arrays/equals (.getBytes "This is a text")
              (-> (cache-get c ["test"])
                  first
@@ -124,7 +148,7 @@
   (testing "cache-prepend with non-empty cache."
     (let [c (make-cache)]
       (cache-set c "test" (.getBytes "This is a") 42 0)
-      (cache-prepend c "test" (.getBytes " text") 45 1)
+      (cache-prepend c "test" (.getBytes " text") 45 0)
       (is (Arrays/equals (.getBytes " textThis is a")
              (-> (cache-get c ["test"])
                  first

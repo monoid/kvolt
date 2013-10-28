@@ -1,30 +1,51 @@
 (ns kvolt.api
   (:require [clojure.java.io :as io]))
 
+(def ^:const YEAR (* 365 24 60 60 1000))
+
 (defn make-cache []
   (atom {}))
+
+(defn resolve-time
+  [time ts]
+  (cond
+   (zero? time) 0            ; Zero is a special value.
+   (< time YEAR) (+ time ts) ; Relative timestamp.
+   :default time))           ; Absolute timestamp.
 
 (defrecord Entry
     ;; TODO: is using store-ts for CAS a good idea?
     [value flags store-ts access-ts expire])
 
 (defn- make-entry [value flags expire]
-  (let [time (System/currentTimeMillis)]
+  (let [ts (System/currentTimeMillis)]
     ;; TODO: expire may be relative or absolute; resolve it.
-    (->Entry value flags time time expire)))
+    (->Entry value flags ts ts (resolve-time expire ts))))
 
 (defn- update-access-ts
   [entry ts]
   (assoc-in entry [:access-ts] ts))
 
-(defn- update-entries [c keys f & values]
-  (reduce (fn [c k]
-            (if (contains? c k)
-              (apply update-in c [k] f values)
-              c))
-          c
-          keys))
+(defn valid?
+  "Check if entry is valid, i.e. exists and is not expired."
+  ([ts e]
+     (and e (let [ex (:expire e)]
+              (or (zero? ex)
+                  (>= ex ts)))))
+  ([ts cache key]
+     (valid? ts (get (if (instance? clojure.lang.Atom cache)
+                       (deref cache)
+                       cache)
+                     key))))
 
+(defn- update-entries [c keys f & values]
+  (let [ts (System/currentTimeMillis)]
+    (reduce (fn [c k]
+              (if (valid? ts c k)
+                (apply update-in c [k] f values)
+                c))
+            c
+            keys)))
 
 (defn filter-entries
   "Filter entries.  Function f takes key and entry, returning boolean."
@@ -54,23 +75,25 @@
   "GET and GETS commands.  Returns seq of arrays [key, Entry]."
   [cache keys]
   ;; Update timestamps and return new cache.
-  (let [c (swap! cache
+  (let [ts (System/currentTimeMillis)
+        c (swap! cache
                  (fn [c keys]
                    ;; TODO: also remove expired values
-                   (let [ts (System/currentTimeMillis)]
-                     (update-entries c keys update-access-ts ts)))
+                   (update-entries c keys update-access-ts ts))
                  keys)]
-    (filter second ; Remove entries without values
+    (filter (comp (partial valid? ts)   ; Remove invalid values
+                  second)
             (map (juxt identity c) keys))))
 
 (defn cache-delete
   "DELETE command."
   [cache key]
-  (swap! cache
-         (fn [c]
-           (if (contains? c key)
-             (dissoc c key)
-             (throw (ex-info "NOT_FOUND" {:key key :cache c}))))))
+  (let [ts (System/currentTimeMillis)]
+    (swap! cache
+           (fn [c]
+             (if (valid? ts c key)
+               (dissoc c key)
+               (throw (ex-info "NOT_FOUND" {:key key :cache c})))))))
 
 (defn cache-set
   "SET command."
@@ -83,55 +106,57 @@
 (defn cache-add
   "ADD command."
   [cache key value flags expire]
-  (swap! cache
-         (fn [c]
-           (if (contains? c key)
-             ;; TODO check if entry haven't expired yet.  Write
-             ;; contains-valid? for this.
-             (throw (ex-info "NOT_STORED" {:key key :value value
-                                           :flags flags :expire expire
-                                           :cache c}))
-             (assoc c key (make-entry value flags expire))))))
+  (let [ts (System/currentTimeMillis)]
+    (swap! cache
+           (fn [c]
+             (if (valid? ts c key)
+               (throw (ex-info "NOT_STORED" {:key key :value value
+                                             :flags flags :expire expire
+                                             :cache c}))
+               (assoc c key (make-entry value flags expire)))))))
 
 
 (defn cache-replace
   "REPLACE command."
   [cache key value flags expire]
-  (swap! cache
-         (fn [c]
-           (if (contains? c key)
-             ;; TODO check if entry haven't expired yet.
-             (assoc c key (make-entry value flags expire))
-             (throw (ex-info "NOT_STORED" {:key key :value value
-                                           :flags flags :expire expire
-                                           :cache c}))))))
+  (let [ts (System/currentTimeMillis)]
+    (swap! cache
+           (fn [c]
+             (if (valid? ts c key)
+               (assoc c key (make-entry value flags expire))
+               (throw (ex-info "NOT_STORED" {:key key :value value
+                                             :flags flags :expire expire
+                                             :cache c})))))))
 
 (defn- update-with-func
   "Update entry with function that accepts new and old values.
 Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   ([cache key value func]
-     (swap! cache
-            (fn [c]
-              (assoc c key
-                     ;; INCR and DECR
-                     (if (contains? c key)
+     (let [ts (System/currentTimeMillis)]
+       (swap! cache
+              (fn [c]
+                (assoc c key
+                       ;; INCR and DECR
                        (let [e (get c key)]
-                         ;; TODO check if e haven't expired yet.
-                         (make-entry (func (:value e) value)
-                                     (:flags e)
-                                     (:expire e)))
-                       (throw (ex-info "NOT_FOUND" {:key key
-                                                    :value value})))))))
+                         (if (valid? ts e)
+                           (make-entry (func (:value e) value)
+                                       (:flags e)
+                                       (:expire e))
+                           (throw (ex-info "NOT_FOUND" {:key key
+                                                        :value value})))))))))
   ([cache key value flags expire func default]
-     (swap! cache
-            (fn [c]
-              (assoc c key
-                     ;; APPEND and PREPEND
-                     ;; TODO check if entry haven't expired yet.
-                     (make-entry (func (:value (get c key
-                                                    {:value default}))
-                                       value)
-                                 flags expire))))))
+     (let [ts (System/currentTimeMillis)]
+       (swap! cache
+              (fn [c]
+                (assoc c key
+                       ;; APPEND and PREPEND
+                       (make-entry (func
+                                    (let [e (get c key)]
+                                      (if (valid? ts e)
+                                        (:value e)
+                                        default))
+                                    value)
+                                   flags expire)))))))
 
 (defn concat-byte-arrays [^bytes a ^bytes b]
   (let [al (alength a)
@@ -144,14 +169,12 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
 (defn cache-append
   "APPEND command."
   [cache key value flags expire]
-  ;; TODO values are arrays of bytes, not strings
   (update-with-func cache key value flags expire #(concat-byte-arrays %1 %2)
                     (byte-array [])))
 
 (defn cache-prepend
   "PREPEND command."
   [cache key value flags expire]
-  ;; TODO values are arrays of bytes, not strings
   (update-with-func cache key value flags expire #(concat-byte-arrays %2 %1)
                     (byte-array [])))
 
@@ -160,7 +183,6 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   [cache key value]
   (update-with-func cache key value
                     (fn [old new]
-                      ;; TODO values are arrays of bytes, not strings
                       (.getBytes
                        (str (+ (Long. (String. old))
                                (Long. (String. new))))))))
@@ -170,7 +192,6 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   [cache key value]
   (update-with-func cache key value
                     (fn [old new]
-                      ;; TODO values are arrays of bytes, not strings
                       (.getBytes
                        (str
                         ;; Prevent underflow as per spec
@@ -180,11 +201,11 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
 
 (defn cache-flush-all
   ([cache]
-     (swap! cache (constantly {})))
+     (reset! cache {}))
   ([cache ts]
      ;; TODO: timestamp may be relative or absolute; resolve it.
      (let [ts (Long. ts)]
-       (swap! cache (filter-entries #(>= (:expire %2) ts))))))
+       (swap! cache filter-entries #(valid? ts %2)))))
 
 (defn cache-gc
   "Remove expired entries."
