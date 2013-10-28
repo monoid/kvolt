@@ -25,6 +25,31 @@
           c
           keys))
 
+
+(defn filter-entries
+  "Filter entries.  Function f takes key and entry, returning boolean."
+  [func m]
+  (hash (filter (comp apply func) m)))
+
+(defn filter-entries--select
+  [func m]
+  (->> (keys m)
+       (filter #(func % (m %)))
+       (select-keys m))
+  (select-keys m
+               (filter #(func % (m %))
+                       (keys m))))
+
+(defn filter-entries--dissoc
+  [func m]
+  (reduce (fn [c k]
+            (if (func k (c k))
+              c
+              (dissoc c k)))
+          m
+          (keys m)))
+
+
 (defn cache-get
   "GET and GETS commands.  Returns seq of arrays [key, Entry]."
   [cache keys]
@@ -157,12 +182,6 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   ([cache]
      (swap! cache (constantly {})))
   ([cache ts]
-     (swap! cache
-            (fn [c ts]
-              ;; TOOD: collect keys and use select-keys
-              (hash (for [pair c
-                          :let [e (pair 1)]
-                          :when (>= (:expire e) ts)]
-                      pair)))
-            ;; TODO: timestamp may be relative or absolute; resolve it.
-            (Long. ts))))
+     ;; TODO: timestamp may be relative or absolute; resolve it.
+     (let [ts (Long. ts)]
+       (swap! cache (filter-entries #(>= (:expire %2) ts))))))
