@@ -185,3 +185,8 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
      ;; TODO: timestamp may be relative or absolute; resolve it.
      (let [ts (Long. ts)]
        (swap! cache (filter-entries #(>= (:expire %2) ts))))))
+
+(defn cache-gc
+  "Remove expired entries."
+  [cache]
+  (cache-flush-all cache (System/currentTimeMillis)))
