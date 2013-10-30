@@ -160,13 +160,23 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                                     value)
                                    flags expire)))))))
 
-(defn concat-byte-arrays [^bytes a ^bytes b]
-  (let [al (alength a)
-        bl (alength b)
-        r (byte-array (+ al bl))]
-    (System/arraycopy a 0 r  0 al)
-    (System/arraycopy b 0 r al bl)
-    r))
+(defn concat-byte-arrays
+  ([^bytes a ^bytes b]
+     (let [al (alength a)
+           bl (alength b)
+           r (byte-array (+ al bl))]
+       (System/arraycopy a 0 r  0 al)
+       (System/arraycopy b 0 r al bl)
+       r))
+  ([^bytes a ^bytes b ^bytes c]
+     (let [al (alength a)
+           bl (alength b)
+           cl (alength c)
+           r (byte-array (+ al bl cl))]
+       (System/arraycopy a 0 r  0 al)
+       (System/arraycopy b 0 r al bl)
+       (System/arraycopy c 0 r (+ al bl) cl)
+       r)))
 
 (defn cache-append
   "APPEND command."
