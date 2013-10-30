@@ -215,6 +215,21 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                                  (Long. (String. new))))))))
    key))
 
+(defn cache-touch [cache key expire]
+  (let [ts (System/currentTimeMillis)
+        expire (resolve-time ts (Long. expire))]
+    (swap! cache
+           (fn [c]
+             (let [e (c key)]
+               (if (valid? ts e)
+                 ;; TODO: same CAS
+                 (assoc c key (-> e
+                                  (assoc :expire expire)
+                                  (assoc :access-ts ts)))
+                 (throw (ex-info "NOT_FOUND" {:key key
+                                              :expire expire
+                                              :cache c}))))))))
+
 (defn cache-flush-all
   ([cache]
      (reset! cache {}))
