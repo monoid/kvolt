@@ -142,8 +142,8 @@ ready form."
 (defn proto-version [store]
   ["VERSION kvolt-0.1.0" false])
 
-(defn proto-quit []
-  )
+(defn proto-quit [ch]
+  (close ch))
 
 (def ^:const OTHER_MAP
   {"get" proto-get
@@ -158,7 +158,7 @@ ready form."
    "version" proto-version})
 
 (defn handle-request
-  [cache [[cmd & args] & maybe-data]]
+  [ch cache [[cmd & args] & maybe-data]]
   (case cmd
     ;; Commands with data
     ;; WARNING: data comes just after cache, not after key
@@ -190,11 +190,10 @@ ready form."
             (.getMessage ex)))))
 
     "quit"
-    (proto-quit) ;; TODO close connection!!!
+    (proto-quit ch)
 
     ;; Otherwise
     (try
-      ;; TODO: compute noreply!!!
       (let [[data noreply]
             (apply (OTHER_MAP cmd) cache args)]
         (if noreply
@@ -207,7 +206,7 @@ ready form."
 (defn- do-the-rap
   [cache ch client-info]
   (receive-all ch
-               (partial handle-request cache)))
+               (partial handle-request ch cache)))
 
 (defn create-server
   [^Integer port]
