@@ -193,30 +193,33 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
 (defn cache-incr
   "INCR command."
   [cache key value]
-  (update-with-func cache key value
-                    (fn [old new]
-                      (.getBytes
-                       (str (+ (Long. (String. old))
-                               (Long. (String. new))))))))
+  (get
+   (update-with-func cache key value
+                     (fn [old new]
+                       (.getBytes
+                        (str (+ (Long. (String. old))
+                                (Long. (String. new)))))))
+   key))
 
 (defn cache-decr
   "DECR command."
   [cache key value]
-  (update-with-func cache key value
-                    (fn [old new]
-                      (.getBytes
-                       (str
-                        ;; Prevent underflow as per spec
-                        (max 0
-                             (- (Long. (String. old))
-                                (Long. (String. new)))))))))
+  (get
+   (update-with-func cache key value
+                     (fn [old new]
+                       (.getBytes
+                        (str
+                         ;; Prevent underflow as per spec
+                         (max 0
+                              (- (Long. (String. old))
+                                 (Long. (String. new))))))))
+   key))
 
 (defn cache-flush-all
   ([cache]
      (reset! cache {}))
   ([cache ts]
-     ;; TODO: timestamp may be relative or absolute; resolve it.
-     (let [ts (Long. ts)]
+     (let [ts (resolve-time (Long. ts))]
        (swap! cache filter-entries #(valid? ts %2)))))
 
 (defn cache-gc
