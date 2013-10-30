@@ -35,16 +35,12 @@ ready form."
 (defcodec memcached-cmd
   (header (string :utf-8 :delimiters ["\r\n"])
           (fn [data]
-            (println "data:" data)
-            (println "---")
             (if-let [p (seq (parse-command-line data))]
               (case (nth p 0)
                 ("set" "add" "replace" "append" "prepend" "cas")
                 (do
-                  (println p)
                   (let [fr [p
                             (repeat (Integer. (nth p 4)) :byte)
-                            ;[:byte :byte] ;; \r\n TODO
                             (string :utf-8 :length 0 :suffix "\r\n")
                             ]]
                     (compile-frame fr)))
@@ -163,10 +159,6 @@ ready form."
 
 (defn handle-request
   [cache [[cmd & args] & maybe-data]]
-  (println "cmd:" cmd)
-  (println "args:" args)
-  (println "data:" maybe-data)
-
   (case cmd
     ;; Commands with data
     ;; WARNING: data comes just after cache, not after key
