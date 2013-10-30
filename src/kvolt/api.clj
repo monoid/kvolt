@@ -7,11 +7,13 @@
   (atom {}))
 
 (defn resolve-time
-  [time ts]
-  (cond
-   (zero? time) 0             ; Zero is a special value.
-   (< time MONTH) (+ time ts) ; Relative timestamp.
-   :default time))            ; Absolute timestamp.
+  ([ts]
+     (resolve-time (System/currentTimeMillis) ts))
+  ([time ts]
+     (cond
+      (zero? time) 0                    ; Zero is a special value.
+      (< time MONTH) (+ time ts)        ; Relative timestamp.
+      :default time)))                  ; Absolute timestamp.
 
 (defrecord Entry
     ;; TODO: is using store-ts for CAS a good idea?
