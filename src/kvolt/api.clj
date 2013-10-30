@@ -21,7 +21,6 @@
 
 (defn- make-entry [value flags expire]
   (let [ts (System/currentTimeMillis)]
-    ;; TODO: expire may be relative or absolute; resolve it.
     (->Entry value flags ts ts (resolve-time expire ts))))
 
 (defn- update-access-ts
