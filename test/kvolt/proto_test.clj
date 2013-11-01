@@ -1,6 +1,7 @@
 (ns kvolt.proto-test
   (:require [clojure.test :refer :all]
-            [kvolt.proto :refer :all]))
+            [kvolt.proto :refer :all]
+            [gloss.io :as gio]))
 
 ;;;
 ;;; Setting...
@@ -196,3 +197,20 @@
     (is
      (= ["flush_all" "1000"]
         (parse-command-line "flush_all 1000")))))
+
+(deftest memcached-set-test
+  (testing "parsing set command"
+    (is
+     (= [["set" "key1" "0" "0" "2"] [97 98] ""]
+        (gio/decode memcached-cmd
+                    (java.nio.ByteBuffer/wrap
+                     (.getBytes "set key1 0 0 2\r\nab\r\n")))))))
+
+
+(deftest memcached-set-noreply-test
+  (testing "parsing set noreply command"
+    (is
+     (= [["set" "key1" "0" "0" "2" "noreply"] [97 98] ""]
+        (gio/decode memcached-cmd
+                    (java.nio.ByteBuffer/wrap
+                     (.getBytes "set key1 0 0 2 noreply\r\nab\r\n")))))))
