@@ -32,8 +32,10 @@ ready form."
 (defcodec empty-frame
   [])
 
+(def ^:const TEXT_CHARSET :ISO-8859-1)
+
 (defcodec memcached-cmd
-  (header (string :utf-8 :delimiters ["\r\n"])
+  (header (string TEXT_CHARSET :delimiters ["\r\n"])
           (fn [data]
             (if-let [p (seq (parse-command-line data))]
               (case (nth p 0)
@@ -41,7 +43,7 @@ ready form."
                 (do
                   (let [fr [p
                             (repeat (Integer. (nth p 4)) :byte)
-                            (string :utf-8 :length 0 :suffix "\r\n")
+                            (string TEXT_CHARSET :length 0 :suffix "\r\n")
                             ]]
                     (compile-frame fr)))
                 ;; Ok, it is some command without trailing data.
