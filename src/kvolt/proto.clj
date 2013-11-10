@@ -52,10 +52,10 @@ ready form."
               ;; command) or CLIENT_ERROR (known command with
               ;; incorrect args).
               empty-frame))
-          (fn [& args]
-            ;; TODO TODO TODO
-            (println "encoder" args)
-            empty-frame)))
+          (fn [p]
+            (println "encoder" p)
+            (string/join " " (map str (first p))))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
