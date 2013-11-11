@@ -200,12 +200,10 @@ ready form."
             (byte-array (nth maybe-data 0))
             (Long. flags)
             (Long. expire))
-           (if (seq noreply)
-             ""
+           (when-not (seq noreply)
              "STORED"))
          (catch ExceptionInfo ex
-           (if (seq noreply)
-             ""
+           (when-not (seq noreply)
              (.getMessage ex))))
        (encode (if noreply
                  empty-frame
