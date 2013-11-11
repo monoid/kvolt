@@ -3,6 +3,7 @@
             [lamina.core :refer :all]
             [aleph.tcp :refer :all]
             [gloss.core :refer :all]
+            [gloss.io :refer :all]
             [kvolt.api :as api])
   (:import clojure.lang.ExceptionInfo))
 
@@ -34,15 +35,23 @@ ready form."
 
 (def ^:const TEXT_CHARSET :ISO-8859-1)
 
+(defcodec memcached-string
+  (string TEXT_CHARSET :delimiters ["\r\n"]))
+
+(defn memcached-bytes [n]
+  ;; TODO finite-frame is broken in gloss 0.2.2 :(
+  ;; (finite-frame n :byte)
+  (compile-frame (repeat n :byte)))
+
 (defcodec memcached-cmd
-  (header (string TEXT_CHARSET :delimiters ["\r\n"])
+  (header memcached-string
           (fn [data]
             (if-let [p (seq (parse-command-line data))]
               (case (nth p 0)
                 ("set" "add" "replace" "append" "prepend" "cas")
                 (do
                   (let [fr [p
-                            (repeat (Integer. (nth p 4)) :byte)
+                            (memcached-bytes (Integer. (nth p 4)))
                             (string TEXT_CHARSET :length 0 :suffix "\r\n")
                             ]]
                     (compile-frame fr)))
@@ -53,9 +62,42 @@ ready form."
               ;; incorrect args).
               empty-frame))
           (fn [p]
-            (println "encoder" p)
             (string/join " " (map str (first p))))))
 
+
+(defn parse-value-line [line]
+  (some->> line
+           (re-matches #"VALUE ([^ \t]+) (\d+) (\d+)(?: (\d+))?")
+           rest ; remove first element
+           ))
+
+
+;; Format of p:
+;; [[key flags bytes] data]
+(defcodec memcached-value-reply
+  (header memcached-string
+   (fn [data]
+     (print data)
+     (let [[k flags bytes maybe-cas] (parse-value-line data)]
+       (print bytes)
+       (compile-frame [[k flags bytes maybe-cas]
+                       (memcached-bytes (Long. bytes))
+                       (string TEXT_CHARSET :length 0 :suffix "\r\n")])))
+   (fn [[[k flags bytes maybe-cas] body]]
+     (if maybe-cas
+       (format "VALUE %s %s %s %s" k flags bytes maybe-cas)
+       (format "VALUE %s %s %s" k flags bytes)))))
+
+(defcodec memcached-reply
+  (header memcached-string
+          (fn [data]
+            (if (= 1 (count data))
+              empty-frame
+              ;; TODO multiplied by length! And with END\r\n
+              memcached-value-reply)
+            )
+          (fn [p]
+            (first p))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -75,31 +117,16 @@ ready form."
 
 ;;; Other commands
 (defn proto-get [store & keys]
-  [(concat
-    (for [[k e] (api/cache-get store keys)]
-      (api/concat-byte-arrays
-       (.getBytes
-        (format "VALUES %s %d %d\r\n" k (:flags e) (alength (:value e))))
-       (:value e)
-       (.getBytes "\r\n")))
-    ["END\r\n"])
-   false])
+  (for [[k e] (api/cache-get store keys)]
+    [[k (:flags e) (alength (:value e)) nil]
+     (seq (:value e))
+     ""]))
 
 (defn proto-gets [store keys]
-  [(concat
-    (for [[k e] (api/cache-get store keys)]
-      (api/concat-byte-arrays
-       (.getBytes
-        (format "VALUES %s %d %d %d\r\n"
-                k
-                (:flags e)
-                (alength (:value e))
-                ;; TODO: use CAS value from counter
-                (:store-ts e)))
-       (:value e)
-       (.getBytes "\r\n")))
-    ["END\r\n"])
-   false])
+  (for [[k e] (api/cache-get store keys)]
+    [[k (:flags e) (alength (:value e)) (:store-ts e)]
+     (seq (:value e))
+     ""]))
 
 (defn proto-delete [store key & noreply]
   [(try
@@ -148,9 +175,7 @@ ready form."
   (close ch))
 
 (def ^:const OTHER_MAP
-  {"get" proto-get
-   "gets" proto-gets
-   "delete" proto-delete
+  {"delete" proto-delete
    "incr" proto-incr
    "decr" proto-decr
    "touch" proto-touch
@@ -166,18 +191,26 @@ ready form."
     ;; WARNING: data comes just after cache, not after key
     ("set" "add" "replace" "append" "prepend")
     (let [[key flags expire len & noreply] args]
-      (try
-       ((STORAGE_MAP cmd)
-              cache
-              key
-              (byte-array (nth maybe-data 0))
-              (Long. flags)
-              (Long. expire))
-       (when-not (seq noreply)
-         "STORED")
-       (catch ExceptionInfo ex
-         (when-not (seq noreply)
-           (.getMessage ex)))))
+      (some->>
+       (try
+         (do
+           ((STORAGE_MAP cmd)
+            cache
+            key
+            (byte-array (nth maybe-data 0))
+            (Long. flags)
+            (Long. expire))
+           (if (seq noreply)
+             ""
+             "STORED"))
+         (catch ExceptionInfo ex
+           (if (seq noreply)
+             ""
+             (.getMessage ex))))
+       (encode (if noreply
+                 empty-frame
+                 memcached-string))
+       (enqueue ch)))
 
     ;; cas has different arguments
     "cas"
@@ -193,6 +226,19 @@ ready form."
 
     "quit"
     (proto-quit ch)
+
+    ("get" "gets")
+    (let [values (apply
+                  (if (= cmd "get")
+                    proto-get
+                    proto-gets)
+                  cache args)]
+      (->> values
+           (encode-all memcached-value-reply)
+           (enqueue ch))
+      (->> "END"
+           (encode memcached-string)
+           (enqueue ch)))
 
     ;; Otherwise
     (try
@@ -215,4 +261,4 @@ ready form."
   (let [cache (api/make-cache)]
     (start-tcp-server (partial do-the-rap cache)
                       {:port port
-                       :frame memcached-cmd})))
+                       :decoder memcached-cmd})))
