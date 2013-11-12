@@ -192,18 +192,18 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
 (defn cache-incr
   "INCR command."
   [cache key value]
-  (get
+  (get-in
    (update-with-func cache key value
                      (fn [old new]
                        (.getBytes
                         (str (+ (Long. (String. old))
                                 (Long. (String. new)))))))
-   key))
+   [key :value]))
 
 (defn cache-decr
   "DECR command."
   [cache key value]
-  (get
+  (get-in
    (update-with-func cache key value
                      (fn [old new]
                        (.getBytes
@@ -212,7 +212,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                          (max 0
                               (- (Long. (String. old))
                                  (Long. (String. new))))))))
-   key))
+   [key :value]))
 
 (defn cache-touch [cache key expire]
   (let [ts (System/currentTimeMillis)
