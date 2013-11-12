@@ -77,7 +77,6 @@ ready form."
 (defcodec memcached-value-reply
   (header memcached-string
    (fn [data]
-     (print data)
      (let [[k flags bytes maybe-cas] (parse-value-line data)]
        (print bytes)
        (compile-frame [[k flags bytes maybe-cas]
@@ -131,6 +130,7 @@ ready form."
 (defn proto-delete [store key & noreply]
   [(try
      (api/cache-delete store key)
+     "DELETED"
      (catch ExceptionInfo ex
        (.getMessage ex)))
    (boolean (seq noreply))])
@@ -152,21 +152,22 @@ ready form."
 (defn proto-touch [store key exptime & noreply]
   [(try
      (api/cache-touch store key exptime)
+     "TOUCHED"
      (catch ExceptionInfo ex
        (.getMessage ex)))
    (boolean (seq noreply))])
 
 (defn proto-stats [store & args]
-  ["END\n\r" false])
+  ["END" false])
 
 (defn proto-flush-all [store & ts]
-  [(if (seq ts)
-     (api/cache-flush-all store (first ts))
-     (api/cache-flush-all store))
-   false])
+  (if (seq ts)
+    (api/cache-flush-all store (first ts))
+    (api/cache-flush-all store))
+  ["OK" false])
 
 (defn proto-verbosity [store val & noreply]
-  ["ON\n\r" false])
+  ["ON" false])
 
 (defn proto-version [store]
   ["VERSION kvolt-0.1.0" false])
@@ -242,11 +243,13 @@ ready form."
     (try
       (let [[data noreply]
             (apply (OTHER_MAP cmd) cache args)]
-        (if noreply
-          empty-frame
-          data))
+        (when-not noreply
+          (enqueue ch data)
+          (enqueue ch "\r\n")))
       (catch ExceptionInfo ex
-        (.getMessage ex)))))
+        (->> (.getMessage ex)
+             (encode memcached-string)
+             (enqueue ch))))))
 
 
 (defn- do-the-rap
