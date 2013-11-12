@@ -194,15 +194,14 @@ ready form."
     (let [[key flags expire len & noreply] args]
       (some->>
        (try
-         (do
-           ((STORAGE_MAP cmd)
-            cache
-            key
-            (byte-array (nth maybe-data 0))
-            (Long. flags)
-            (Long. expire))
-           (when-not (seq noreply)
-             "STORED"))
+         ((STORAGE_MAP cmd)
+          cache
+          key
+          (byte-array (nth maybe-data 0))
+          (Long. flags)
+          (Long. expire))
+         (when-not (seq noreply)
+           "STORED")
          (catch ExceptionInfo ex
            (when-not (seq noreply)
              (.getMessage ex))))
