@@ -2,7 +2,7 @@
   (:use kvolt.proto)
   (:gen-class))
 
-(def ^:const PORT 3303)
+(def ^:const PORT 11211)
 
 (defn -main
   "I don't do a whole lot ... yet."
