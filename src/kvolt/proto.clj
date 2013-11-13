@@ -20,12 +20,32 @@ ready form."
                 (string/split #" ")))
     cmd))
 
+(def ^:const COMMANDS
+  [["set|add|replace|append|prepend"
+    " ([^ \\t]+) (\\d+) (\\d+) (\\d+)(?: (noreply))?"]
+   ["cas" " ([^ \\t]+) (\\d+) (\\d+) (\\d+) (\\d+)"]
+   ["get|gets" "((?: [^ \\t]+)+)"]
+   ["stats" "(?: ([^ \\t]+))?"]
+   ["quit|version" ""]
+   ["flush_all" "(?: (\\d+))?"]
+   ["incr|decr|touch" " ([^ \\t]+) (\\d+)(?: (noreply))?"]
+   ["delete" " ([^ \\t]+)(?: (noreply))?"]])
+
+(def ^:const COMMAND_REGEX
+  (re-pattern (string/join "|"
+                           (for [[c a] COMMANDS]
+                             (format "(?:(%s)%s)" c a)))))
+
+(def ^:const CMD_REGEX
+  (re-pattern (format "^(?:%s) .*"
+                      (string/join "|"
+                                   (map first COMMANDS)))))
 
 (defn parse-command-line
   "Check validity of command line and split it into strings."
   [line]
   (some->> line
-           (re-matches #"(?:(?:(set|add|replace|append|prepend) ([^ \t]+) (\d+) (\d+) (\d+)(?: (noreply))?)|(?:(cas) ([^ \t]+) (\d+) (\d+) (\d+) (\d+))|(?:(get|gets)((?: [^ \t]+)+))|(?:(stats)(?: ([^ \t]+))?)|(quit|version)|(?:(flush_all)(?: (\d+))?)|(?:(incr|decr|touch) ([^ \t]+) (\d+)(?: (noreply))?)|(?:(delete) ([^ \t]+)(?: (noreply))?))")
+           (re-matches COMMAND_REGEX)
            rest ; remove first element
            (remove nil?)
            split-varargs))
@@ -46,21 +66,22 @@ ready form."
 (defcodec memcached-cmd
   (header memcached-string
           (fn [data]
-            (if-let [p (seq (parse-command-line data))]
-              (case (nth p 0)
-                ("set" "add" "replace" "append" "prepend" "cas")
-                (do
-                  (let [fr [p
-                            (memcached-bytes (Integer. (nth p 4)))
-                            (string TEXT_CHARSET :length 0 :suffix "\r\n")
-                            ]]
-                    (compile-frame fr)))
-                ;; Ok, it is some command without trailing data.
-                (compile-frame [p]))
-              ;; TODO: return error message, either ERROR (unknwn
-              ;; command) or CLIENT_ERROR (known command with
-              ;; incorrect args).
-              empty-frame))
+            (compile-frame
+             (if-let [p (seq (parse-command-line data))]
+               (case (nth p 0)
+                 ("set" "add" "replace" "append" "prepend" "cas")
+                 [p
+                  (memcached-bytes (Integer. (nth p 4)))
+                  (string TEXT_CHARSET :length 0 :suffix "\r\n")
+                  ]
+                 ;; Ok, it is some command without trailing data.
+                 [p])
+               ;; return error message, either ERROR (unknwn
+               ;; command) or CLIENT_ERROR (known command with
+               ;; incorrect args).
+               [[:error (if (re-matches CMD_REGEX data)
+                          "CLIENT_ERROR"
+                          "ERROR")]])))
           (fn [p]
             (string/join " " (map str (first p))))))
 
@@ -240,11 +261,14 @@ ready form."
 
     ;; Otherwise
     (try
-      (let [[data noreply]
-            (apply (OTHER_MAP cmd) cache args)]
-        (when-not noreply
-          (enqueue ch data)
-          (enqueue ch "\r\n")))
+      (if (= cmd :error)
+        ;; (first args) is always a string
+        (enqueue ch (str (first args) "\r\n"))
+        (let [[data noreply]
+              (apply (OTHER_MAP cmd) cache args)]
+          (when-not noreply
+            (enqueue ch data)
+            (enqueue ch "\r\n"))))
       (catch ExceptionInfo ex
         (->> (.getMessage ex)
              (encode memcached-string)
