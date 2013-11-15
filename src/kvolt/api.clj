@@ -4,7 +4,8 @@
 (def ^:const MONTH (* 30 24 60 60 1000))
 
 (defn make-cache []
-  (atom {}))
+  {::data (atom {})
+   ::cas (atom 0)}) ; CAS counter
 
 (defn resolve-time
   ([ts]
@@ -17,11 +18,11 @@
 
 (defrecord Entry
     ;; TODO: is using store-ts for CAS a good idea?
-    [value flags store-ts access-ts expire])
+    [value flags cas expire])
 
-(defn- make-entry [value flags expire]
+(defn- make-entry [value flags expire cas]
   (let [ts (System/currentTimeMillis)]
-    (->Entry value flags ts ts (resolve-time expire ts))))
+    (->Entry value flags cas (resolve-time expire ts))))
 
 (defn- update-access-ts
   [entry ts]
@@ -34,10 +35,11 @@
               (or (zero? ex)
                   (>= ex ts)))))
   ([ts cache key]
-     (valid? ts (get (if (instance? clojure.lang.Atom cache)
-                       (deref cache)
-                       cache)
-                     key))))
+     (let [c (get cache ::data cache)]
+       (valid? ts (get (if (instance? clojure.lang.Atom c)
+                         (deref c)
+                         c)
+                       key)))))
 
 (defn- update-entries [c keys f & values]
   (let [ts (System/currentTimeMillis)]
@@ -77,11 +79,7 @@
   [cache keys]
   ;; Update timestamps and return new cache.
   (let [ts (System/currentTimeMillis)
-        c (swap! cache
-                 (fn [c keys]
-                   ;; TODO: also remove expired values
-                   (update-entries c keys update-access-ts ts))
-                 keys)]
+        c @(::data cache)]
     (filter (comp (partial valid? ts)   ; Remove invalid values
                   second)
             (map (juxt identity c) keys))))
@@ -90,7 +88,7 @@
   "DELETE command."
   [cache key]
   (let [ts (System/currentTimeMillis)]
-    (swap! cache
+    (swap! (::data cache)
            (fn [c]
              (if (valid? ts c key)
                (dissoc c key)
@@ -99,32 +97,35 @@
 (defn cache-set
   "SET command."
   [cache key value flags expire]
-  (swap! cache
-         assoc
-         key
-         (make-entry value flags expire)))
+  (let [cas (swap! (::cas cache) inc)]
+    (swap! (::data cache)
+           assoc
+           key
+           (make-entry value flags expire cas))))
 
 (defn cache-add
   "ADD command."
   [cache key value flags expire]
-  (let [ts (System/currentTimeMillis)]
-    (swap! cache
+  (let [ts (System/currentTimeMillis)
+        cas (swap! (::cas cache) inc)]
+    (swap! (::data cache)
            (fn [c]
              (if (valid? ts c key)
                (throw (ex-info "NOT_STORED" {:key key :value value
                                              :flags flags :expire expire
                                              :cache c}))
-               (assoc c key (make-entry value flags expire)))))))
+               (assoc c key (make-entry value flags expire cas)))))))
 
 
 (defn cache-replace
   "REPLACE command."
   [cache key value flags expire]
-  (let [ts (System/currentTimeMillis)]
-    (swap! cache
+  (let [ts (System/currentTimeMillis)
+        cas (swap! (::cas cache) inc)]
+    (swap! (::data cache)
            (fn [c]
              (if (valid? ts c key)
-               (assoc c key (make-entry value flags expire))
+               (assoc c key (make-entry value flags expire cas))
                (throw (ex-info "NOT_STORED" {:key key :value value
                                              :flags flags :expire expire
                                              :cache c})))))))
@@ -133,8 +134,9 @@
   "Update entry with function that accepts new and old values.
 Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   ([cache key value func]
-     (let [ts (System/currentTimeMillis)]
-       (swap! cache
+     (let [ts (System/currentTimeMillis)
+           cas (swap! (::cas cache) inc)]
+       (swap! (::data cache)
               (fn [c]
                 (assoc c key
                        ;; INCR and DECR
@@ -142,12 +144,14 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                          (if (valid? ts e)
                            (make-entry (func (:value e) value)
                                        (:flags e)
-                                       (:expire e))
+                                       (:expire e)
+                                       cas)
                            (throw (ex-info "NOT_FOUND" {:key key
                                                         :value value})))))))))
   ([cache key value flags expire func default]
-     (let [ts (System/currentTimeMillis)]
-       (swap! cache
+     (let [ts (System/currentTimeMillis)
+           cas (swap! (::cas cache) inc)]
+       (swap! (::data cache)
               (fn [c]
                 (assoc c key
                        ;; APPEND and PREPEND
@@ -157,7 +161,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
                                         (:value e)
                                         default))
                                     value)
-                                   flags expire)))))))
+                                   flags expire cas)))))))
 
 (defn concat-byte-arrays
   ([^bytes a ^bytes b]
@@ -217,7 +221,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
 (defn cache-touch [cache key expire]
   (let [ts (System/currentTimeMillis)
         expire (resolve-time ts (Long. expire))]
-    (swap! cache
+    (swap! (::data cache)
            (fn [c]
              (let [e (c key)]
                (if (valid? ts e)
@@ -231,10 +235,10 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
 
 (defn cache-flush-all
   ([cache]
-     (reset! cache {}))
+     (reset! (::data cache) {}))
   ([cache ts]
      (let [ts (resolve-time (Long. ts))]
-       (swap! cache filter-entries #(valid? ts %2)))))
+       (swap! (::data cache) filter-entries #(valid? ts %2)))))
 
 (defn cache-gc
   "Remove expired entries."

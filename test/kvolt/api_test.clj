@@ -234,4 +234,4 @@
       (doseq [i (range 10)]
         (cache-set c (str "test" i) (.getBytes (str "value" i)) 42 0))
       (cache-flush-all c)
-      (is (= {} @c)))))
+      (is (= '() (cache-get c "test5"))))))

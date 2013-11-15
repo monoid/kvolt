@@ -142,9 +142,9 @@ ready form."
      (seq (:value e))
      ""]))
 
-(defn proto-gets [store keys]
+(defn proto-gets [store & keys]
   (for [[k e] (api/cache-get store keys)]
-    [[k (:flags e) (alength (:value e)) (:store-ts e)]
+    [[k (:flags e) (alength (:value e)) (:cas e)]
      (seq (:value e))
      ""]))
 
