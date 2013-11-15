@@ -99,7 +99,6 @@ ready form."
   (header memcached-string
    (fn [data]
      (let [[k flags bytes maybe-cas] (parse-value-line data)]
-       (print bytes)
        (compile-frame [[k flags bytes maybe-cas]
                        (memcached-bytes (Long. bytes))
                        (string TEXT_CHARSET :length 0 :suffix "\r\n")])))
@@ -132,8 +131,8 @@ ready form."
    "append" api/cache-append
    "prepend" api/cache-prepend})
 
-(defn proto-cas [cache & args]
-  "NOT_FOUND\r\n")
+(defn proto-cas [cache value key flags expire cas & noreply]
+  (api/cache-cas cache key value (Long. flags) (Long. expire) (Long. cas)))
 
 ;;; Other commands
 (defn proto-get [store & keys]
@@ -235,13 +234,13 @@ ready form."
     "cas"
     (let [noreply (< 6 (count args))]
       (try
-        (apply proto-cas cache  (byte-array (nth maybe-data 0)) args)
+        (apply proto-cas cache (byte-array (nth maybe-data 0)) args)
 
         (when-not noreply
-          "STORED")
+          (enqueue ch "STORED\r\n"))
         (catch ExceptionInfo ex
           (when-not noreply
-            (.getMessage ex)))))
+            (enqueue ch (str (.getMessage ex) "\r\n"))))))
 
     "quit"
     (proto-quit ch)

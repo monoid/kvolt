@@ -193,6 +193,18 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   (update-with-func cache key value flags expire #(concat-byte-arrays %2 %1)
                     (byte-array [])))
 
+(defn cache-cas
+  "CAS command."
+  [cache key value flags expire cas]
+  (swap! (::data cache)
+         #(if-let [e (% key)]
+            (if (= cas (:cas e))
+              (assoc % key (make-entry value flags expire (swap!
+                                                           (::cas cache)
+                                                           inc)))
+              (throw (ex-info "EXISTS" {:key key :cas cas :new-cas (:cas e)})))
+            (throw (ex-info "NOT_FOUND" {:key key :cas cas})))))
+
 (defn cache-incr
   "INCR command."
   [cache key value]
