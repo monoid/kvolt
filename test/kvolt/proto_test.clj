@@ -198,6 +198,18 @@
      (= ["flush_all" "1000"]
         (parse-command-line "flush_all 1000")))))
 
+(deftest parse-flush_all-noreply-test
+  (testing "simple flush_all command"
+    (is
+     (= ["flush_all" "noreply"]
+        (parse-command-line "flush_all noreply")))))
+
+(deftest parse-flush_all-arg-noreply-test
+  (testing "flush_all with arg command"
+    (is
+     (= ["flush_all" "1000" "noreply"]
+        (parse-command-line "flush_all 1000 noreply")))))
+
 (deftest memcached-set-test
   (testing "parsing set command"
     (is

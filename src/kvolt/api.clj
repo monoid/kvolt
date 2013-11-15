@@ -52,11 +52,11 @@
 
 (defn filter-entries
   "Filter entries.  Function f takes key and entry, returning boolean."
-  [func m]
-  (hash (filter (comp apply func) m)))
+  [m func]
+  (into {} (filter #(apply func %1) m)))
 
 (defn filter-entries--select
-  [func m]
+  [m func]
   (->> (keys m)
        (filter #(func % (m %)))
        (select-keys m))
@@ -65,7 +65,7 @@
                        (keys m))))
 
 (defn filter-entries--dissoc
-  [func m]
+  [m func]
   (reduce (fn [c k]
             (if (func k (c k))
               c
@@ -249,7 +249,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
   ([cache]
      (reset! (::data cache) {}))
   ([cache ts]
-     (let [ts (resolve-time (Long. ts))]
+     (let [ts (resolve-time ts)]
        (swap! (::data cache) filter-entries #(valid? ts %2)))))
 
 (defn cache-gc

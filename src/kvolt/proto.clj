@@ -27,7 +27,7 @@ ready form."
    ["get|gets" "((?: [^ \\t]+)+)"]
    ["stats" "(?: ([^ \\t]+))?"]
    ["quit|version" ""]
-   ["flush_all" "(?: (\\d+))?"]
+   ["flush_all" "(?: (\\d+))?(?: (noreply))?"]
    ["incr|decr|touch" " ([^ \\t]+) (\\d+)(?: (noreply))?"]
    ["delete" " ([^ \\t]+)(?: (noreply))?"]])
 
@@ -180,11 +180,18 @@ ready form."
 (defn proto-stats [store & args]
   ["END" false])
 
-(defn proto-flush-all [store & ts]
-  (if (seq ts)
-    (api/cache-flush-all store (first ts))
-    (api/cache-flush-all store))
-  ["OK" false])
+(defn proto-flush-all
+  ([store]
+     (api/cache-flush-all store)
+     ["OK" false])
+  ([store ts-noreply]
+     (if (= "noreply" ts-noreply)
+       (api/cache-flush-all store)
+       (api/cache-flush-all store (Long. ts-noreply)))
+     ["OK" (= "noreply" ts-noreply)])
+  ([store ts noreply]
+     (api/cache-flush-all store (Long. ts))
+     ["OK" true]))
 
 (defn proto-verbosity [store val & noreply]
   ["ON" false])
@@ -195,7 +202,7 @@ ready form."
 (defn proto-quit [ch]
   (close ch))
 
-(def ^:const OTHER_MAP
+(def OTHER_MAP
   {"delete" proto-delete
    "incr" proto-incr
    "decr" proto-decr
