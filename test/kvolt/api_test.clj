@@ -21,26 +21,28 @@
 
 (deftest valid?-empty-test
   (testing "valid? returns false on non-existent entry."
-    (let [c (make-cache), ts (System/currentTimeMillis)]
-      (is (not (valid? ts c "test"))))))
+    (let [c (make-cache), now (System/currentTimeMillis)]
+      (is (not (valid? now c "test"))))))
 
 (deftest valid?-zero-ts-test
   (testing "valid? returns true on entry with zero expiration."
-    (let [c (make-cache), ts (System/currentTimeMillis)]
+    (let [c (make-cache), now (System/currentTimeMillis)]
       (cache-set c "test" (byte-array []) 42 0)
-      (is (valid? ts c "test")))))
+      (is (valid? now c "test")))))
 
 (deftest valid?-old-test
   (testing "valid? returns false on expired entry."
-    (let [c (make-cache), ts (System/currentTimeMillis)]
+    (let [c (make-cache), now (System/currentTimeMillis),
+          ts (quot now 1000)]
       (cache-set c "test" (byte-array []) 42 (- ts 100))
-      (is (not (valid? ts c "test"))))))
+      (is (= false (valid? now c "test"))))))
 
 (deftest valid?-new-test
   (testing "valid? returns true on fresh entry."
-    (let [c (make-cache), ts (System/currentTimeMillis)]
+    (let [c (make-cache), now (System/currentTimeMillis),
+          ts (quot now 1000)]
       (cache-set c "test" (byte-array []) 42 (+ ts 10000))
-      (is (valid? ts c "test")))))
+      (is (valid? now c "test")))))
 
 
 (deftest set-and-get-key-test

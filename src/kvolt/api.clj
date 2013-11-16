@@ -1,7 +1,7 @@
 (ns kvolt.api
   (:require [clojure.java.io :as io]))
 
-(def ^:const MONTH (* 30 24 60 60 1000))
+(def ^:const MONTH (* 30 24 60 60))
 
 (defn make-cache []
   {::data (atom {})
@@ -10,11 +10,11 @@
 (defn resolve-time
   ([ts]
      (resolve-time (System/currentTimeMillis) ts))
-  ([time ts]
+  ([now ts]
      (cond
-      (zero? time) 0                      ; Zero is a special value.
-      (< time MONTH) (+ (* 1000 time) ts) ; Relative timestamp.
-      :default (* 1000 time))))           ; Absolute timestamp.
+      (zero? ts) 0                      ; Zero is a special value.
+      (< ts MONTH) (+ (* 1000 ts) now) ; Relative timestamp.
+      :default (* 1000 ts))))           ; Absolute timestamp.
 
 (defrecord Entry
     ;; TODO: is using store-ts for CAS a good idea?
@@ -22,7 +22,7 @@
 
 (defn- make-entry [value flags expire cas]
   (let [ts (System/currentTimeMillis)]
-    (->Entry value flags cas (resolve-time expire ts))))
+    (->Entry value flags cas (resolve-time ts expire))))
 
 (defn- update-access-ts
   [entry ts]
@@ -30,15 +30,15 @@
 
 (defn valid?
   "Check if entry is valid, i.e. exists and is not expired."
-  ([ts e]
+  ([now e]
      (and e (let [ex (:expire e)]
               (or (zero? ex)
-                  (>= ex ts)))))
-  ([ts cache key]
+                  (>= ex now)))))
+  ([now cache key]
      (let [c (get cache ::data cache)]
-       (valid? ts (get (if (instance? clojure.lang.Atom c)
-                         (deref c)
-                         c)
+       (valid? now (get (if (instance? clojure.lang.Atom c)
+                          (deref c)
+                          c)
                        key)))))
 
 (defn- update-entries [c keys f & values]
@@ -232,7 +232,7 @@ Long form creates entry if it doesn't exist, short throws \"NOT_FOUND\"."
 
 (defn cache-touch [cache key expire]
   (let [ts (System/currentTimeMillis)
-        expire (resolve-time ts (Long. expire))]
+        expire (resolve-time (Long. ts) expire)]
     (swap! (::data cache)
            (fn [c]
              (let [e (c key)]
