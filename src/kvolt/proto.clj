@@ -4,7 +4,8 @@
             [aleph.tcp :refer :all]
             [gloss.core :refer :all]
             [gloss.io :refer :all]
-            [kvolt.api :as api])
+            [kvolt.api :as api]
+            [kvolt.util :as util])
   (:import clojure.lang.ExceptionInfo))
 
 (defn- split-varargs
@@ -291,7 +292,7 @@ ready form."
 (defn- do-gc [cache pause]
   (loop []
     (Thread/sleep @pause)
-    (println "Gc...")
+    (util/log "Gc...")
     (api/cache-gc cache)
     (recur)))
 
