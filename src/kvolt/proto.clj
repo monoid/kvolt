@@ -30,7 +30,7 @@ ready form."
    ["quit|version" ""]
    ["flush_all" "(?: (\\d+))?(?: (noreply))?"]
    ["incr|decr|touch" " ([^ \\t]+) (\\d+)(?: (noreply))?"]
-   ["delete" " ([^ \\t]+)(?: (noreply))?"]])
+   ["delete" " ([^ \\t]+)(?: (noreply|0))?"]])
 
 (def ^:const COMMAND_REGEX
   (re-pattern (string/join "|"
@@ -154,7 +154,7 @@ ready form."
      "DELETED"
      (catch ExceptionInfo ex
        (.getMessage ex)))
-   (boolean (seq noreply))])
+   (= ["noreply"] noreply)])
 
 (defn proto-incr [store key value & noreply]
   [(try
