@@ -286,9 +286,23 @@ ready form."
   (receive-all ch
                (partial handle-request ch cache)))
 
+(def TEN_MINUTES (* 10 60 1000))
+
+(defn- do-gc [cache pause]
+  (loop []
+    (Thread/sleep @pause)
+    (println "Gc...")
+    (api/cache-gc cache)
+    (recur)))
+
 (defn create-server
   [^Integer port]
-  (let [cache (api/make-cache)]
-    (start-tcp-server (partial do-the-rap cache)
-                      {:port port
-                       :decoder memcached-cmd})))
+  (let [cache (api/make-cache)
+        pause (atom TEN_MINUTES)
+        gc-thread (Thread. #(do-gc cache pause))]
+    (.start gc-thread)
+    [(start-tcp-server (partial do-the-rap cache)
+                       {:port port
+                        :decoder memcached-cmd})
+     pause
+     gc-thread]))
